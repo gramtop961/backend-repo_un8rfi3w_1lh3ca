@@ -1,6 +1,11 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List
+
+from database import create_document, get_documents
+from schemas import Waitlistentry
 
 app = FastAPI()
 
@@ -19,6 +24,30 @@ def read_root():
 @app.get("/api/hello")
 def hello():
     return {"message": "Hello from the backend API!"}
+
+@app.post("/api/waitlist")
+def join_waitlist(entry: Waitlistentry):
+    try:
+        # Normalize email to lowercase
+        data = entry.model_dump()
+        data["email"] = data["email"].lower()
+        inserted_id = create_document("waitlistentry", data)
+        return {"status": "ok", "id": inserted_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class WaitlistResponseItem(BaseModel):
+    name: str
+    email: str
+
+@app.get("/api/waitlist", response_model=List[WaitlistResponseItem])
+def list_waitlist(limit: int = 20):
+    try:
+        docs = get_documents("waitlistentry", limit=limit)
+        # Only expose name and email
+        return [{"name": d.get("name", ""), "email": d.get("email", "")} for d in docs]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/test")
 def test_database():
